@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skyline — Weather</title>
+<style>
+  :root{
+    --midnight:#0b1533;
+    --ink:#10141f;
+    --storm:#3a5a8c;
+    --daylight:#7ec8e3;
+    --amber:#f2a65a;
+    --fog:#eef1f6;
+    --fog-dim:rgba(238,241,246,0.62);
+    --card-bg:rgba(11,21,51,0.32);
+    --card-border:rgba(238,241,246,0.16);
+    --radius:22px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100vh;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--fog);
+    overflow-x:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 16px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+
+  /* ---------- Living sky background ---------- */
+  #sky{
+    position:fixed; inset:0; z-index:-2;
+    background:linear-gradient(180deg,var(--midnight),var(--storm));
+    transition:background 1.4s ease;
+  }
+  #sky.clear-day{ background:linear-gradient(180deg,#2f8fd6,#8fd0ec 60%,#eaf6ff); }
+  #sky.clear-night{ background:linear-gradient(180deg,#050a1a,#0e1c40 55%,#182a56); }
+  #sky.cloud-day{ background:linear-gradient(180deg,#5c7594,#93a7bd 60%,#c7d2df); }
+  #sky.cloud-night{ background:linear-gradient(180deg,#0a1226,#1b2942 60%,#2c3c58); }
+  #sky.rain-day{ background:linear-gradient(180deg,#3c4f63,#5b7085 60%,#7e93a5); }
+  #sky.rain-night{ background:linear-gradient(180deg,#080d16,#131f2d 60%,#1d2c3c); }
+  #sky.storm-day,#sky.storm-night{ background:linear-gradient(180deg,#131722,#232c3d 55%,#333f52); }
+  #sky.snow-day{ background:linear-gradient(180deg,#8fa3bb,#c3d1e0 60%,#eef3f8); }
+  #sky.snow-night{ background:linear-gradient(180deg,#0e1526,#26314a 60%,#3c4a63); }
+  #sky.fog-day{ background:linear-gradient(180deg,#8a94a1,#b8c0c9 60%,#dde1e6); }
+  #sky.fog-night{ background:linear-gradient(180deg,#1a1e26,#2b303a 60%,#3d434f); }
+
+  #stage{ position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+
+  /* sun */
+  .sun{
+    position:absolute; top:8%; right:12%; width:120px; height:120px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #fff6d8, var(--amber) 70%);
+    box-shadow:0 0 90px 30px rgba(242,166,90,0.55);
+    animation:pulse 6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.06);} }
+
+  .moon{
+    position:absolute; top:8%; right:14%; width:80px; height:80px; border-radius:50%;
+    background:radial-gradient(circle at 32% 30%, #fbfbff, #cfd6e8 75%);
+    box-shadow:0 0 50px 14px rgba(207,214,232,0.35), inset -14px -6px 0 6px rgba(11,21,51,0.55);
+  }
+
+  .star{
+    position:absolute; width:2px; height:2px; background:#fff; border-radius:50%;
+    animation:twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle{ 0%,100%{opacity:0.15;} 50%{opacity:1;} }
+
+  .cloud{
+    position:absolute; background:rgba(255,255,255,0.85); border-radius:100px;
+    filter:blur(0.5px); opacity:0.9;
+  }
+  .cloud::before,.cloud::after{
+    content:""; position:absolute; background:inherit; border-radius:50%;
+  }
+  @keyframes drift{ from{transform:translateX(-10vw);} to{transform:translateX(110vw);} }
+
+  .drop{
+    position:absolute; top:-5%; width:2px; height:22px; border-radius:2px;
+    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.75));
+    animation:fall linear infinite;
+  }
+  @keyframes fall{ from{transform:translateY(-10vh);} to{transform:translateY(110vh);} }
+
+  .flake{
+    position:absolute; top:-5%; border-radius:50%; background:#fff;
+    animation:snowfall linear infinite;
+  }
+  @keyframes snowfall{
+    from{transform:translate(0,-10vh);}
+    to{transform:translate(20px,110vh);}
+  }
+
+  .bolt{
+    position:absolute; inset:0; background:rgba(255,255,255,0.0);
+    animation:flash 7s infinite;
+  }
+  @keyframes flash{
+    0%,96%,100%{background:rgba(255,255,255,0);}
+    97%{background:rgba(255,255,255,0.35);}
+    97.5%{background:rgba(255,255,255,0);}
+    98%{background:rgba(255,255,255,0.2);}
+    98.5%{background:rgba(255,255,255,0);}
+  }
+
+  .fog-layer{
+    position:absolute; left:-20%; width:140%; height:120px;
+    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.55), rgba(255,255,255,0));
+    filter:blur(6px); animation:driftFog 18s linear infinite;
+  }
+  @keyframes driftFog{ from{transform:translateX(-6%);} to{transform:translateX(6%);} }
+
+  /* ---------- App card ---------- */
+  #app{
+    position:relative; z-index:1;
+    width:100%; max-width:460px;
+    background:var(--card-bg);
+    border:1px solid var(--card-border);
+    border-radius:var(--radius);
+    backdrop-filter:blur(18px) saturate(140%);
+    -webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.45);
+    padding:28px 26px 22px;
+  }
+  h1.brand{
+    margin:0 0 18px; font-size:0.78rem; letter-spacing:0.22em; text-transform:uppercase;
+    font-weight:600; color:var(--fog-dim);
+    display:flex; align-items:center; gap:8px;
+  }
+  h1.brand .dot{ width:7px; height:7px; border-radius:50%; background:var(--amber); box-shadow:0 0 10px var(--amber); }
+
+  .search-row{ display:flex; gap:8px; margin-bottom:6px; }
+  #location-input{
+    flex:1; padding:12px 14px; border-radius:14px; border:1px solid var(--card-border);
+    background:rgba(255,255,255,0.08); color:var(--fog); font-size:0.95rem; outline:none;
+    transition:border-color .2s, background .2s;
+  }
+  #location-input::placeholder{ color:var(--fog-dim); }
+  #location-input:focus{ border-color:var(--amber); background:rgba(255,255,255,0.13); }
+  .icon-btn{
+    width:44px; height:44px; flex:0 0 44px; border-radius:14px; border:1px solid var(--card-border);
+    background:rgba(255,255,255,0.08); color:var(--fog); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:background .2s, transform .15s;
+  }
+  .icon-btn:hover{ background:rgba(255,255,255,0.18); }
+  .icon-btn:active{ transform:scale(0.94); }
+  .icon-btn:focus-visible, #location-input:focus-visible, button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+
+  #suggestions{
+    list-style:none; margin:6px 0 0; padding:4px; border-radius:14px;
+    background:rgba(11,21,51,0.75); border:1px solid var(--card-border); display:none; overflow:hidden;
+  }
+  #suggestions li{ padding:10px 12px; border-radius:10px; cursor:pointer; font-size:0.92rem; }
+  #suggestions li:hover{ background:rgba(255,255,255,0.1); }
+
+  #status{ min-height:20px; font-size:0.85rem; color:var(--fog-dim); margin:10px 2px 0; }
+
+  #panel{ display:none; margin-top:14px; }
+  .place{ font-size:1.05rem; font-weight:600; }
+  .updated{ font-size:0.78rem; color:var(--fog-dim); margin-top:2px; }
+
+  .hero{ display:flex; align-items:center; justify-content:space-between; margin:18px 0 6px; }
+  .temp{
+    font-family:'Space Grotesk','Inter',sans-serif;
+    font-size:4.6rem; font-weight:700; line-height:1; letter-spacing:-0.02em;
+  }
+  .temp sup{ font-size:1.6rem; top:-2.2em; font-weight:500; }
+  .condition{ text-align:right; }
+  .condition .glyph{ font-size:2.6rem; display:block; line-height:1; }
+  .condition .label{ font-size:0.95rem; color:var(--fog-dim); margin-top:2px; }
+
+  .feels{ font-size:0.9rem; color:var(--fog-dim); margin-bottom:14px; }
+
+  .grid{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:8px;
+  }
+  .stat{
+    background:rgba(255,255,255,0.07); border:1px solid var(--card-border);
+    border-radius:14px; padding:12px 10px; text-align:center;
+  }
+  .stat .k{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--fog-dim); }
+  .stat .v{ font-size:1.15rem; font-weight:600; margin-top:4px; }
+
+  .unit-toggle{
+    margin-top:16px; display:flex; justify-content:center; gap:6px;
+  }
+  .unit-toggle button{
+    padding:6px 14px; border-radius:20px; border:1px solid var(--card-border);
+    background:transparent; color:var(--fog-dim); font-size:0.8rem; cursor:pointer;
+    transition:background .2s, color .2s;
+  }
+  .unit-toggle button.active{ background:var(--amber); color:var(--ink); border-color:var(--amber); font-weight:600; }
+
+  #error{ display:none; margin-top:12px; padding:12px 14px; border-radius:14px; background:rgba(255,90,90,0.14); border:1px solid rgba(255,120,120,0.35); font-size:0.88rem; }
+
+  #sandbox-notice{
+    display:none; margin-bottom:14px; padding:12px 14px; border-radius:14px;
+    background:rgba(242,166,90,0.16); border:1px solid rgba(242,166,90,0.4); font-size:0.82rem; line-height:1.4;
+  }
+  #sandbox-notice a{ color:var(--amber); font-weight:600; }
+
+  .skeleton{ animation:shimmer 1.4s ease-in-out infinite; background:rgba(255,255,255,0.08); border-radius:8px; }
+  @keyframes shimmer{ 0%,100%{opacity:0.5;} 50%{opacity:1;} }
+</style>
+</head>
+<body>
+
+<div id="sky" class="cloud-day"></div>
+<div id="stage"></div>
+
+<div id="app">
+  <h1 class="brand"><span class="dot"></span>Skyline</h1>
+
+  <div id="sandbox-notice"></div>
+
+  <div class="search-row">
+    <input id="location-input" type="text" placeholder="Search a city…" autocomplete="off">
+    <button class="icon-btn" id="locate-btn" title="Use my location" aria-label="Use my location">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path></svg>
+    </button>
+    <button class="icon-btn" id="search-btn" title="Search" aria-label="Search">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    </button>
+  </div>
+  <ul id="suggestions"></ul>
+
+  <div id="status">Search a city, or use your location, to see current conditions.</div>
+  <div id="error"></div>
+
+  <div id="panel">
+    <div class="place" id="place-name">—</div>
+    <div class="updated" id="updated-at">—</div>
+
+    <div class="hero">
+      <div class="temp" id="temp-value">--<sup id="temp-unit">°C</sup></div>
+      <div class="condition">
+        <span class="glyph" id="cond-glyph">—</span>
+        <span class="label" id="cond-label">—</span>
+      </div>
+    </div>
+    <div class="feels" id="feels-like">Feels like —</div>
+
+    <div class="grid">
+      <div class="stat"><div class="k">Humidity</div><div class="v" id="stat-humidity">—</div></div>
+      <div class="stat"><div class="k">Wind</div><div class="v" id="stat-wind">—</div></div>
+      <div class="stat"><div class="k">Precip.</div><div class="v" id="stat-precip">—</div></div>
+    </div>
+
+    <div class="unit-toggle">
+      <button id="unit-c" class="active">°C</button>
+      <button id="unit-f">°F</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const sky = document.getElementById('sky');
+  const statusEl = document.getElementById('status');
+  const errorEl = document.getElementById('error');
+  const panel = document.getElementById('panel');
+  const input = document.getElementById('location-input');
+  const suggestionsEl = document.getElementById('suggestions');
+  const sandboxNotice = document.getElementById('sandbox-notice');
+
+  let unit = 'c'; // 'c' or 'f'
+  let lastCurrent = null; // store latest fetched data for unit toggle re-render
+  let networkBlocked = false; // set true once we detect fetch calls are failing outright
+
+  // If this page is embedded inside another site's iframe (e.g. a chat preview),
+  // outbound fetch calls to external APIs are commonly blocked by that host's
+  // security sandbox. Flag it early so the message we show on failure is accurate.
+  const isEmbedded = (function(){
+    try { return window.self !== window.top; } catch(e) { return true; }
+  })();
+
+  // ---------- Weather code -> description / category ----------
+  // WMO weather codes used by Open-Meteo
+  const WMO = {
+    0:['Clear sky','clear'], 1:['Mainly clear','clear'], 2:['Partly cloudy','cloud'], 3:['Overcast','cloud'],
+    45:['Fog','fog'], 48:['Depositing rime fog','fog'],
+    51:['Light drizzle','rain'], 53:['Drizzle','rain'], 55:['Dense drizzle','rain'],
+    56:['Freezing drizzle','rain'], 57:['Dense freezing drizzle','rain'],
+    61:['Slight rain','rain'], 63:['Rain','rain'], 65:['Heavy rain','rain'],
+    66:['Freezing rain','rain'], 67:['Heavy freezing rain','rain'],
+    71:['Slight snow','snow'], 73:['Snow','snow'], 75:['Heavy snow','snow'], 77:['Snow grains','snow'],
+    80:['Slight showers','rain'], 81:['Showers','rain'], 82:['Violent showers','rain'],
+    85:['Slight snow showers','snow'], 86:['Heavy snow showers','snow'],
+    95:['Thunderstorm','storm'], 96:['Thunderstorm, hail','storm'], 99:['Severe thunderstorm, hail','storm']
+  };
+  const GLYPH = { clear:'☀', cloud:'☁', rain:'🌧', snow:'❄', storm:'⛈', fog:'🌫' };
+
+  function describe(code){
+    return WMO[code] || ['Unknown', 'cloud'];
+  }
+
+  // ---------- Animated sky ----------
+  function clearStage(){ stage.innerHTML = ''; }
+
+  function renderSky(category, isDay){
+    sky.className = `${category}-${isDay ? 'day':'night'}`;
+    clearStage();
+
+    if(category === 'clear'){
+      const body = document.createElement('div');
+      body.className = isDay ? 'sun' : 'moon';
+      stage.appendChild(body);
+      if(!isDay){
+        for(let i=0;i<40;i++){
+          const s = document.createElement('div');
+          s.className = 'star';
+          s.style.left = Math.random()*100+'%';
+          s.style.top = Math.random()*60+'%';
+          s.style.animationDelay = (Math.random()*3)+'s';
+          stage.appendChild(s);
+        }
+      }
+    }
+
+    if(category === 'cloud' || category === 'clear'){
+      const count = category === 'cloud' ? 6 : 2;
+      for(let i=0;i<count;i++){
+        const c = document.createElement('div');
+        c.className = 'cloud';
+        const w = 90 + Math.random()*100, h = w*0.4;
+        c.style.width = w+'px'; c.style.height = h+'px';
+        c.style.top = (8 + Math.random()*40)+'%';
+        c.style.left = '-20%';
+        c.style.animation = `drift ${28 + Math.random()*20}s linear infinite`;
+        c.style.animationDelay = (Math.random()*-20)+'s';
+        c.style.opacity = isDay ? 0.9 : 0.35;
+        stage.appendChild(c);
+      }
+    }
+
+    if(category === 'rain' || category === 'storm'){
+      // background clouds first
+      for(let i=0;i<4;i++){
+        const c = document.createElement('div');
+        c.className = 'cloud';
+        const w = 120 + Math.random()*90, h = w*0.4;
+        c.style.width = w+'px'; c.style.height = h+'px';
+        c.style.top = (4 + Math.random()*20)+'%';
+        c.style.left = '-20%';
+        c.style.opacity = 0.6;
+        c.style.animation = `drift ${22+Math.random()*10}s linear infinite`;
+        c.style.animationDelay = (Math.random()*-15)+'s';
+        stage.appendChild(c);
+      }
+      for(let i=0;i<60;i++){
+        const d = document.createElement('div');
+        d.className = 'drop';
+        d.style.left = Math.random()*100+'%';
+        d.style.animationDuration = (0.5+Math.random()*0.5)+'s';
+        d.style.animationDelay = (Math.random()*-2)+'s';
+        stage.appendChild(d);
+      }
+      if(category === 'storm'){
+        const bolt = document.createElement('div');
+        bolt.className = 'bolt';
+        stage.appendChild(bolt);
+      }
+    }
+
+    if(category === 'snow'){
+      for(let i=0;i<70;i++){
+        const f = document.createElement('div');
+        f.className = 'flake';
+        const size = 3+Math.random()*4;
+        f.style.width = size+'px'; f.style.height = size+'px';
+        f.style.left = Math.random()*100+'%';
+        f.style.opacity = 0.4+Math.random()*0.6;
+        f.style.animationDuration = (6+Math.random()*6)+'s';
+        f.style.animationDelay = (Math.random()*-8)+'s';
+        stage.appendChild(f);
+      }
+    }
+
+    if(category === 'fog'){
+      for(let i=0;i<4;i++){
+        const layer = document.createElement('div');
+        layer.className = 'fog-layer';
+        layer.style.top = (15+i*20)+'%';
+        layer.style.animationDelay = (i*-3)+'s';
+        stage.appendChild(layer);
+      }
+    }
+  }
+
+  // ---------- Rendering weather data ----------
+  function cToF(c){ return c*9/5+32; }
+  function fmtTemp(c){
+    const v = unit === 'c' ? c : cToF(c);
+    return Math.round(v);
+  }
+
+  function render(data){
+    lastCurrent = data;
+    const { name, country, current, isDay } = data;
+    const [label, category] = describe(current.weather_code);
+
+    document.getElementById('place-name').textContent = country ? `${name}, ${country}` : name;
+    document.getElementById('updated-at').textContent = 'Updated ' + new Date(current.time).toLocaleString(undefined,{hour:'2-digit',minute:'2-digit', month:'short', day:'numeric'});
+    document.getElementById('temp-value').innerHTML = fmtTemp(current.temperature_2m) + `<sup id="temp-unit">°${unit.toUpperCase()}</sup>`;
+    document.getElementById('cond-glyph').textContent = GLYPH[category] || '—';
+    document.getElementById('cond-label').textContent = label;
+    document.getElementById('feels-like').textContent = `Feels like ${fmtTemp(current.apparent_temperature)}°${unit.toUpperCase()}`;
+    document.getElementById('stat-humidity').textContent = Math.round(current.relative_humidity_2m) + '%';
+    document.getElementById('stat-wind').textContent = Math.round(current.wind_speed_10m) + ' km/h';
+    document.getElementById('stat-precip').textContent = (current.precipitation ?? 0) + ' mm';
+
+    panel.style.display = 'block';
+    statusEl.textContent = '';
+    errorEl.style.display = 'none';
+
+    renderSky(category, isDay);
+  }
+
+  // ---------- API calls (Open-Meteo, no key required) ----------
+  async function geocode(query){
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Geocoding request failed');
+    const data = await res.json();
+    return data.results || [];
+  }
+
+  async function fetchWeather(lat, lon){
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,is_day&timezone=auto`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Weather request failed');
+    const data = await res.json();
+    return data.current;
+  }
+
+  async function loadFor(lat, lon, name, country){
+    statusEl.textContent = 'Fetching current conditions…';
+    errorEl.style.display = 'none';
+    try{
+      const current = await fetchWeather(lat, lon);
+      render({ name, country, current, isDay: current.is_day === 1 });
+    }catch(err){
+      console.error('Weather fetch failed:', err);
+      panel.style.display = 'none';
+      statusEl.textContent = '';
+      showNetworkAwareError();
+    }
+  }
+
+  async function loadByQuery(query){
+    if(!query.trim()) return;
+    statusEl.textContent = 'Looking up location…';
+    errorEl.style.display = 'none';
+    suggestionsEl.style.display = 'none';
+    try{
+      const results = await geocode(query);
+      if(results.length === 0){
+        statusEl.textContent = '';
+        errorEl.style.display = 'block';
+        errorEl.textContent = `No location found for "${query}". Check the spelling and try again.`;
+        return;
+      }
+      const r = results[0];
+      await loadFor(r.latitude, r.longitude, r.name, r.country);
+    }catch(err){
+      console.error('Geocoding lookup failed:', err);
+      statusEl.textContent = '';
+      showNetworkAwareError();
+    }
+  }
+
+  function showNetworkAwareError(){
+    errorEl.style.display = 'block';
+    if(isEmbedded){
+      networkBlocked = true;
+      errorEl.textContent = "This page is running inside an embedded preview, which blocks outbound requests to the weather API. Download the file and open it directly in a browser tab to get live results.";
+    } else {
+      errorEl.textContent = "Couldn't reach the weather service. Check your internet connection and try again.";
+    }
+  }
+
+  function useMyLocation(){
+    if(!navigator.geolocation){
+      errorEl.style.display = 'block';
+      errorEl.textContent = 'Geolocation is not supported by this browser.';
+      return;
+    }
+    statusEl.textContent = 'Getting your location…';
+    navigator.geolocation.getCurrentPosition(
+      pos => loadFor(pos.coords.latitude, pos.coords.longitude, 'Your location', ''),
+      err => {
+        statusEl.textContent = '';
+        errorEl.style.display = 'block';
+        errorEl.textContent = 'Location access was denied. Try searching a city instead.';
+      },
+      { timeout: 10000 }
+    );
+  }
+
+  // ---------- Search suggestions ----------
+  let debounceTimer = null;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if(q.length < 2){ suggestionsEl.style.display = 'none'; return; }
+    debounceTimer = setTimeout(async () => {
+      try{
+        const results = await geocode(q);
+        if(results.length === 0){ suggestionsEl.style.display = 'none'; return; }
+        suggestionsEl.innerHTML = '';
+        results.forEach(r => {
+          const li = document.createElement('li');
+          li.textContent = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+          li.addEventListener('click', () => {
+            input.value = r.name;
+            suggestionsEl.style.display = 'none';
+            loadFor(r.latitude, r.longitude, r.name, r.country);
+          });
+          suggestionsEl.appendChild(li);
+        });
+        suggestionsEl.style.display = 'block';
+      }catch(e){ console.error('Autocomplete lookup failed:', e); /* stay quiet in the UI for suggestions */ }
+    }, 350);
+  });
+
+  input.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ suggestionsEl.style.display = 'none'; loadByQuery(input.value); }
+  });
+  document.getElementById('search-btn').addEventListener('click', () => loadByQuery(input.value));
+  document.getElementById('locate-btn').addEventListener('click', useMyLocation);
+  document.addEventListener('click', (e) => {
+    if(!suggestionsEl.contains(e.target) && e.target !== input) suggestionsEl.style.display = 'none';
+  });
+
+  document.getElementById('unit-c').addEventListener('click', () => setUnit('c'));
+  document.getElementById('unit-f').addEventListener('click', () => setUnit('f'));
+  function setUnit(u){
+    unit = u;
+    document.getElementById('unit-c').classList.toggle('active', u==='c');
+    document.getElementById('unit-f').classList.toggle('active', u==='f');
+    if(lastCurrent) render(lastCurrent);
+  }
+
+  // Initial ambient sky before any data loads
+  renderSky('cloud', true);
+
+  if(isEmbedded){
+    sandboxNotice.style.display = 'block';
+    sandboxNotice.innerHTML = 'Heads up: previews embedded in another site sometimes block outbound API requests. If searching does nothing, download this file and open it directly in a browser tab.';
+  }
+
+  // Try geolocation automatically on load (falls back silently if denied)
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      pos => loadFor(pos.coords.latitude, pos.coords.longitude, 'Your location', ''),
+      () => { /* user can search manually */ },
+      { timeout: 6000 }
+    );
+  }
+})();
+</script>
+</body>
+</html>
